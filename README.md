@@ -1,59 +1,85 @@
-# Black Counter App
+# Black Counter — executável portátil para Windows
 
-## Visão Geral
-O **Black Counter App** é um assistente interativo para decisões de blackjack em tempo real. Ele combina contagem de cartas Hi-Lo, probabilidade condicional e expectativa matemática (EV) para recomendar ações otimizadas a cada rodada, considerando tanto as mãos do jogador quanto as cartas vistas do dealer e de terceiros.
+Aplicativo de contagem e análise de blackjack empacotado com Electron Builder.
+O resultado final é um único `BlackCounter_Portable_*.exe`: basta baixar,
+executar e a janela do contador abre imediatamente, sem instalador nem
+dependências externas.
 
-## Fluxo da Aplicação
-1. **Configuração inicial**
-   - Escolha o número de baralhos: 1, 4 ou 8.
-   - Defina a aposta mínima: 5, 25, 50 ou 125.
-   - Inicie a sessão tocando em **Iniciar**, avançando para a mesa de jogo.
-2. **Mesa de jogo**
-   - Painel superior exibe chance de vitória, aposta sugerida e ação recomendada.
-   - Durante a ação do dealer, mostra apenas a chance e o aviso "Dealer jogando…".
-   - Prompt de seguro aparece automaticamente quando o dealer revela um Ás, com recomendação por 3 segundos baseada no EV.
-   - Contador de terceiros permite registrar cartas saídas por outros jogadores, mantendo RC, totais de cartas baixas/altas/neutras e uma cola Hi-Lo.
-   - Bloco do dealer aceita marcação das cartas 1–10 e indica totais soft/hard.
-   - Bloco do jogador suporta até 4 mãos (splits), mostra totais com indicações de mão soft e dobrada, inclui botões de cartas 1–10, desfazer e confirmação de dobrar.
-   - Rodapé traz estatísticas completas: RC, TC, cartas restantes, probabilidade de 10, placar (V/E/D), lucro acumulado, rodadas jogadas e resumo do contador de terceiros (estado atual e da rodada anterior).
-   - Botões de utilidade: **Reinício** (reset geral) e **Próxima** (nova rodada manual).
+## Funcionalidades principais
+- Assistente completo de decisões com cálculo de EV, RC/TC, seguro e splits.
+- Contador manual para cartas vistas por terceiros com memória da rodada
+  anterior.
+- Placar de vitórias/empates/derrotas, lucro acumulado e automações para avanço
+  da mão, split automático e encerramento da rodada.
+- Interface otimizada em JavaScript/CSS puros, empacotada dentro do runtime
+  Electron para garantir comportamento idêntico em uma janela dedicada.
 
-## Regras Implementadas
-- Dealer para em 17 (S17).
-- Split permitido até 4 vezes.
-- Dobrar após split é configurável (padrão: não permitido).
-- Seguro sugerido apenas quando EV positivo (geralmente Ás do dealer com alta chance de carta oculta 10).
-- Penetração do baralho fixada em 60% para cálculo do TC.
+## Pré-requisitos
+### 1. Instalar Node.js no Windows
+1. Acesse [https://nodejs.org/](https://nodejs.org/) e baixe a versão LTS.
+2. Execute o instalador e marque a opção **"Add to PATH"** quando for exibida.
+3. Conclua o instalador e reinicie o terminal/PowerShell.
 
-## Lógica de Decisão
-- **Contagem Hi-Lo**: cartas 2–6 = +1, 7–9 = 0, 10/A = −1.
-- **Running Count (RC)**: saldo acumulado do Hi-Lo considerando jogador, dealer e terceiros.
-- **True Count (TC)**: RC normalizado pelos baralhos restantes.
-- **Distribuição de probabilidades**: ajustada dinamicamente com base em RC e cartas marcadas, com fator exponencial β para reduzir viés.
-- **Motor recursivo de decisões**: avalia EV de Stand, Hit, Double e Split; recomenda Seguro quando EV > 0; executa split automático quando vantajoso; avança automaticamente ao Parar.
-- **Liquidação determinística**:
-  - Blackjack natural paga 3:2 (exceto mãos derivadas de split).
-  - Dobro dobra a aposta e encerra após uma carta.
-  - Vitória = +aposta, Empate = 0, Derrota = −aposta.
+### 2. Baixar o código
+1. Clique em **Code → Download ZIP** aqui no repositório ou clone com Git.
+2. Extraia o `.zip` para uma pasta simples como `C:\BlackCounter`.
 
-## Automatismos
-- Auto-split quando EV justificar.
-- Auto-parada se a ação ótima for Parar.
-- Auto-avance para a próxima rodada ~3 s após o dealer completar ≥17.
-- Bloqueio de ações do jogador depois que o dealer inicia sua segunda carta.
+## Primeiro passo: rodar `npm install`
+> Este comando baixa o Electron e todas as dependências do projeto.
 
-## Métricas Monitoradas
-- Chance de vitória.
-- Aposta sugerida baseada na expectativa atual do baralho.
-- RC/TC e cartas restantes.
-- Probabilidade de carta 10 (para seguro).
-- Placar: vitórias, empates, derrotas, lucro acumulado e rodadas jogadas.
-- Resumo do contador de terceiros: estado atual e último estado (RC · L · H · N).
+Abra o **PowerShell** na pasta extraída (Shift + clique direito → "Abrir no
+PowerShell" ou use `cd C:\BlackCounter`) e execute:
 
-## Quick Tests Internos
-- `hiLoValue(2) = +1`
-- `hiLoValue(7) = 0`
-- `hiLoValue(10) = -1`
-- `A + 10 = 21` (soft)
+```powershell
+npm install
+```
 
-Use estes testes para garantir que a lógica fundamental de contagem e avaliação de mão permanece correta durante o desenvolvimento.
+Você pode automatizar tudo com o script incluso: dê duplo clique em
+`scripts\windows-build.bat` para instalar dependências e gerar o executável em
+uma tacada só.
+
+## Desenvolver e testar
+- **Abrir a janela do app em modo desenvolvimento**:
+
+  ```powershell
+  npm start
+  ```
+
+- **Checar rapidamente o bundle JavaScript** (garante ausência de erros de
+  sintaxe):
+
+  ```powershell
+  npm run lint:core
+  ```
+
+## Gerar o executável portátil
+```
+npm run package:win
+```
+
+Execute o comando no Windows (PowerShell ou Prompt). Em Linux/macOS é preciso
+instalar o `wine` para permitir o empacotamento do executável Windows.
+
+O Electron Builder gera `dist/BlackCounter_Portable_1.0.0_x64.exe` (o sufixo
+pode mudar conforme a versão). Compartilhe somente esse arquivo — o usuário
+final executa e o app abre em uma janela dedicada.
+
+## Estrutura de pastas
+```
+Black-Counter/
+├─ app/
+│  ├─ assets/
+│  │  ├─ main.js      # Lógica + renderização da UI em JS puro
+│  │  └─ style.css    # Estilos otimizados (dark theme responsivo)
+│  └─ index.html      # Shell HTML estático
+├─ electron/
+│  ├─ main.js         # Processo principal do Electron (janela/segurança)
+│  └─ preload.js      # Preload isolado sem expor APIs extras
+├─ scripts/
+│  └─ windows-build.bat # Automação para Windows (instalação + build)
+├─ package.json       # Scripts de desenvolvimento e empacotamento
+└─ AGENTS.md          # Diretrizes internas do repositório
+```
+
+## Licença
+MIT
