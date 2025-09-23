@@ -819,6 +819,24 @@ function renderTable(derived) {
     lockPlayerActions ? '<span class="note">Informe a carta do dealer antes de continuar.</span>' : '',
   ].filter(Boolean).join(' ');
 
+  const metricsLine = [
+    `RC <strong>${state.runningCount}</strong>`,
+    `TC <strong>${trueCount.toFixed(2)}</strong>`,
+    `Restantes <strong>${totalRemaining}</strong>` + (playableCards > 0 ? ` (${playableCards} até corte)` : ''),
+    `Fora <strong>${deadCards}</strong>`,
+    `Penetração <strong>${penetrationPct}%</strong>`,
+    `Decks p/ TC <strong>${decksForTC}</strong>`,
+    `P(10) <strong>${(insurance.pTen * 100).toFixed(1)}%</strong>${insurance.suggest ? ' · +EV' : ''}`,
+  ].map((text) => `<span class="metric-item">${text}</span>`).join('');
+
+  const scoreLine = `
+    <span class="score-chip score-win" title="Vitórias">V ${state.wins}</span>
+    <span class="score-chip score-tie" title="Empates">E ${state.ties}</span>
+    <span class="score-chip score-loss" title="Derrotas">D ${state.losses}</span>
+    <span class="score-chip score-profit" title="Lucro">Lucro ${state.netProfit.toFixed(2)}</span>
+    <span class="score-chip score-rounds" title="Rodadas">R ${state.rounds}</span>
+  `;
+
   return `
     <section class="table">
       ${headerHTML}
@@ -827,20 +845,19 @@ function renderTable(derived) {
         <article class="panel">
           <header>Contador terceiros</header>
           <div class="others">
-            <div>
+            <div class="others-group">
               <span>Hi-Lo (±1)</span>
               <div class="stepper" data-action="othersRC">
-                <button data-delta="-1">−</button>
+                <button data-delta="-1" aria-label="Diminuir Hi-Lo">−</button>
                 <div>${state.others.rc}</div>
-                <button data-delta="1">+</button>
+                <button data-delta="1" aria-label="Aumentar Hi-Lo">+</button>
               </div>
             </div>
-            <div>
+            <div class="others-group">
               <span>Neutras 7–9</span>
-              <div class="stepper" data-action="othersZero">
-                <button data-delta="-1">−</button>
+              <div class="stepper stepper-neutral" data-action="othersZero">
                 <div>${state.others.zero}</div>
-                <button data-delta="1">+</button>
+                <button data-delta="1" aria-label="Adicionar carta neutra">+</button>
               </div>
             </div>
           </div>
@@ -863,24 +880,8 @@ function renderTable(derived) {
         </article>
         <article class="panel panel-stats">
           <header>Métricas e Placar</header>
-          <div class="stats-grid">
-            <ul class="metrics">
-              <li>RC: <strong>${state.runningCount}</strong></li>
-              <li>TC: <strong>${trueCount.toFixed(2)}</strong></li>
-              <li>Cartas restantes: <strong>${totalRemaining}</strong> (${playableCards} até corte)</li>
-              <li>Fora do jogo: <strong>${deadCards}</strong></li>
-              <li>Penetração: <strong>${penetrationPct}%</strong></li>
-              <li>Decks p/ TC: <strong>${decksForTC}</strong></li>
-              <li>P(10) seguro: <strong>${(insurance.pTen * 100).toFixed(1)}%</strong> ${insurance.suggest ? '· +EV' : ''}</li>
-            </ul>
-            <ul class="metrics metrics-score">
-              <li>Vitórias: <strong>${state.wins}</strong></li>
-              <li>Empates: <strong>${state.ties}</strong></li>
-              <li>Derrotas: <strong>${state.losses}</strong></li>
-              <li>Lucro: <strong>${state.netProfit.toFixed(2)}</strong></li>
-              <li>Rodadas: <strong>${state.rounds}</strong></li>
-            </ul>
-          </div>
+          <div class="metrics-row" aria-label="Métricas principais">${metricsLine}</div>
+          <div class="score-row" aria-label="Placar e progresso">${scoreLine}</div>
           <footer class="panel-footer">
             <button class="secondary" id="reset-btn">Reinício</button>
             <button class="primary" id="next-btn">Próxima</button>
