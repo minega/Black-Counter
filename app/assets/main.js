@@ -1,3 +1,4 @@
+// Configurações fixas da mesa para manter todas as regras em um só lugar.
 const RULES = {
   dealerStandsOn17: true,
   doubleAfterSplit: false,
@@ -5,20 +6,26 @@ const RULES = {
   penetration: 0.6,
 };
 
+// Valores padrão expostos na tela inicial.
 const DEFAULT_DECK_OPTIONS = [1, 4, 8];
 const DEFAULT_BET_OPTIONS = [5, 25, 50, 125];
 
+// Base de cartas por baralho — usada em todas as projeções.
 const initialPerDeck = { 1: 4, 2: 4, 3: 4, 4: 4, 5: 4, 6: 4, 7: 4, 8: 4, 9: 4, 10: 16 };
 
+// Temporizadores centralizados para mensagens, avanço automático e acerto da rodada.
 const timers = {
   insurance: null,
   autoAdvance: null,
   settle: null,
 };
 
+// Estado global inicializado com todas as variáveis controladas pela UI.
 const state = createInitialState();
 
+// Monta o estado padrão de uma nova sessão.
 function createInitialState() {
+  // Etapa 1: declarar todas as fatias necessárias para renderização e lógica.
   return {
     screen: 'intro',
     decks: 1,
@@ -48,24 +55,29 @@ function createInitialState() {
   };
 }
 
+// Conversão Hi-Lo do valor da carta para manter o contador em tempo real.
 function hiLoValue(v) {
   if (v === 1 || v === 10) return -1;
   if (v >= 2 && v <= 6) return 1;
   return 0;
 }
 
+// Normaliza as figuras em 10 para simplificar comparações.
 function normRank(v) {
   return v >= 10 ? 10 : v;
 }
 
+// Calcula total e flag soft de uma mão dada.
 function handTotal(cards) {
   let sum = 0;
   let aces = 0;
+  // Etapa 1: somar valores tratando Ás como 11 inicialmente.
   for (const v of cards) {
     if (v === 1) { sum += 11; aces++; }
     else if (v >= 10) { sum += 10; }
     else { sum += v; }
   }
+  // Etapa 2: reduzir Ás até evitar estouro.
   while (sum > 21 && aces > 0) {
     sum -= 10;
     aces--;
@@ -73,12 +85,14 @@ function handTotal(cards) {
   return { total: sum, soft: aces > 0 && sum <= 21 };
 }
 
+// Cria a matriz de cartas disponíveis multiplicando pelo número de baralhos.
 function computeInitialCounts(decks) {
   const counts = Array(11).fill(0);
   for (let v = 1; v <= 10; v++) counts[v] = initialPerDeck[v] * decks;
   return counts;
 }
 
+// Subtrai as cartas vistas pelo jogador para obter o restante bruto.
 function computeRemainingCounts(initialCounts, seenCounts) {
   const rem = Array(11).fill(0);
   for (let v = 1; v <= 10; v++) {
@@ -87,54 +101,56 @@ function computeRemainingCounts(initialCounts, seenCounts) {
   return rem;
 }
 
+// Ajusta a composição removendo cartas de terceiros e calculando a penetração.
 function computeTiltedCounts(baseCounts, others) {
-  const baseTotal = baseCounts.reduce((a, b) => a + b, 0);
-  const totalRemaining = Math.max(baseTotal - Math.min(baseTotal, others.lo + others.hi + others.zero), 1);
-  const decksRemainingRaw = totalRemaining / 52;
-  const decksForTC = Math.max(decksRemainingRaw, state.decks * (1 - RULES.penetration));
+  // Etapa 1: clonar o vetor base para evitar mutações externas.
+  const counts = baseCounts.slice();
 
-  const denom = Math.max(decksForTC * 20, 1);
-  const beta = Math.max(-0.8, Math.min(0.8, others.rc / denom));
-  const loMul = Math.exp(beta);
-  const hiMul = Math.exp(-beta);
+  // Etapa 2: remover cartas por faixa proporcionalmente.
+  const removeFromRange = (range, qty) => {
+    if (qty <= 0) return 0;
+    const available = range.reduce((acc, rank) => acc + counts[rank], 0);
+    if (available <= 0) return 0;
+    const toRemove = Math.min(qty, available);
+    const fallbackShare = 1 / range.length;
+    for (const rank of range) {
+      const share = counts[rank] / available || fallbackShare;
+      const delta = toRemove * share;
+      counts[rank] = Math.max(0, counts[rank] - delta);
+    }
+    return toRemove;
+  };
 
-  const out = Array(11).fill(0);
-  for (let v = 1; v <= 10; v++) {
-    const base = baseCounts[v];
-    let mul = 1;
-    if (v === 1 || v === 10) mul = hiMul;
-    else if (v >= 2 && v <= 6) mul = loMul;
-    out[v] = base * mul;
-  }
+  const removedLow = removeFromRange([2, 3, 4, 5, 6], others.lo);
+  const removedHigh = removeFromRange([1, 10], others.hi);
+  const removedNeutral = removeFromRange([7, 8, 9], others.zero);
+  const removedByOthers = removedLow + removedHigh + removedNeutral;
 
-  const neutralSum = out[7] + out[8] + out[9];
-  if (others.zero > 0 && neutralSum > 0) {
-    const f = Math.min(1, others.zero / neutralSum);
-    out[7] *= (1 - f);
-    out[8] *= (1 - f);
-    out[9] *= (1 - f);
-  }
+  // Etapa 3: consolidar métricas finais considerando o corte de 60%.
+  const totalRemaining = counts.reduce((a, b) => a + b, 0);
+  const seenPersonal = state.seenCounts.reduce((a, b) => a + b, 0);
+  const totalCards = state.decks * 52;
+  const cutLimit = Math.max(0, Math.round(totalCards * RULES.penetration));
+  const seenTotal = Math.min(totalCards, seenPersonal + removedByOthers);
+  const cardsAboveCut = Math.max(0, cutLimit - seenTotal);
+  const cardsBehindCut = Math.max(0, totalRemaining - cardsAboveCut);
+  const decksForTC = Math.max(cardsAboveCut / 52, 0.25);
+  const penetration = totalCards > 0 ? seenTotal / totalCards : 0;
 
-  const lowSum = out[2] + out[3] + out[4] + out[5] + out[6];
-  if (others.lo > 0 && lowSum > 0) {
-    const f = Math.min(1, others.lo / lowSum);
-    for (let v = 2; v <= 6; v++) out[v] *= (1 - f);
-  }
-
-  const highSum = out[1] + out[10];
-  if (others.hi > 0 && highSum > 0) {
-    const f = Math.min(1, others.hi / highSum);
-    out[1] *= (1 - f);
-    out[10] *= (1 - f);
-  }
-
-  const sum = out.reduce((a, b) => a + b, 0) || 1;
-  const scale = totalRemaining / sum;
-  for (let v = 1; v <= 10; v++) out[v] *= scale;
-
-  return { counts: out, decksForTC, totalRemaining };
+  return {
+    counts,
+    decksForTC,
+    totalRemaining,
+    removedByOthers,
+    cardsAboveCut,
+    cardsBehindCut,
+    penetration,
+    cutLimit,
+    seenTotal,
+  };
 }
 
+// Calcula a distribuição de probabilidade de cada carta restante.
 function computePMF(tiltedCounts, totalRemaining) {
   const pmf = {};
   const denom = Math.max(totalRemaining, 1);
@@ -142,10 +158,12 @@ function computePMF(tiltedCounts, totalRemaining) {
   return pmf;
 }
 
+// Calcula EV, chance de vitória e empate caso o jogador pare.
 function resolveStand(dealerDist, playerTotal) {
   if (playerTotal > 21) return { ev: -1, pWin: 0, pTie: 0 };
   let pWin = dealerDist.bust || 0;
   let pTie = 0;
+  // Etapa única: percorrer totais possíveis do dealer comparando com o jogador.
   for (const key of Object.keys(dealerDist)) {
     if (key === 'bust') continue;
     const dt = parseInt(key, 10);
@@ -157,6 +175,7 @@ function resolveStand(dealerDist, playerTotal) {
   return { ev, pWin, pTie };
 }
 
+// Expande a jogada do dealer considerando TODAS as cartas restantes.
 function buildDealerDistribution(pmf, dealerCards) {
   const total = handTotal(dealerCards);
   const memo = new Map();
@@ -202,6 +221,7 @@ function buildDealerDistribution(pmf, dealerCards) {
   return normalized;
 }
 
+// Avalia todas as ações possíveis para uma mão (parar, comprar, dobrar).
 function bestFromState({ pmf, dealerDist, allowDouble, playerTotal, playerSoft, cardsCount }) {
   if (playerTotal > 21) return { action: 'BUST', ev: -1, pWin: 0, pTie: 0 };
 
@@ -274,6 +294,7 @@ function bestFromState({ pmf, dealerDist, allowDouble, playerTotal, playerSoft, 
   return { action: best.name, ev: best.ev, pWin: best.pWin, pTie: best.pTie };
 }
 
+// Trata o cenário de separação recursiva respeitando o número máximo permitido.
 function evalSplit({ pmf, dealerDist, rank, splitCount }) {
   const canResplit = splitCount < RULES.maxSplits;
   let perHandEV = 0;
@@ -299,16 +320,18 @@ function evalSplit({ pmf, dealerDist, rank, splitCount }) {
   return 2 * perHandEV;
 }
 
+// Reúne todos os derivados necessários para renderização e decisões.
 function computeDerived() {
   const initialCounts = computeInitialCounts(state.decks);
   const remaining = computeRemainingCounts(initialCounts, state.seenCounts);
   const tilted = computeTiltedCounts(remaining, state.others);
   const pmf = computePMF(tilted.counts, tilted.totalRemaining);
-  const trueCount = state.runningCount / Math.max(tilted.decksForTC, 0.25);
+  const decksForTC = tilted.decksForTC > 0 ? tilted.decksForTC : 0.25;
+  const trueCount = state.runningCount / decksForTC;
   const dealerDist = buildDealerDistribution(pmf, state.dealerCards.length ? state.dealerCards : [0]);
+  const handSummaries = state.hands.map((hand) => handTotal(hand));
   const activeHand = state.hands[state.activeHand] || [];
-  const activeTotal = handTotal(activeHand);
-  const playerTotals = state.hands.map(handTotal);
+  const activeTotal = handSummaries[state.activeHand] || handTotal(activeHand);
   const allowDouble = state.hands.length > 1 ? RULES.doubleAfterSplit : true;
   let best = { action: null, ev: 0, pWin: 0, pTie: 0 };
   if (activeHand.length > 0) {
@@ -358,10 +381,9 @@ function computeDerived() {
   const preWinPct = 0.5 + preEdge / 2;
   const suggestedBet = preEdge < -0.02 ? 0 : state.minBet;
 
-  const handsWinPct = state.hands.length === 0 ? 0 : state.hands
-    .map((hand) => handTotal(hand).total)
-    .map((total) => Math.max(0, Math.min(1, resolveStand(dealerDist, total).pWin)))
-    .reduce((a, b) => a + b, 0) / Math.max(state.hands.length, 1);
+  const handsWinPct = handSummaries.length === 0 ? 0 : handSummaries
+    .map((summary) => Math.max(0, Math.min(1, resolveStand(dealerDist, summary.total).pWin)))
+    .reduce((a, b) => a + b, 0) / Math.max(handSummaries.length, 1);
 
   return {
     initialCounts,
@@ -370,9 +392,9 @@ function computeDerived() {
     pmf,
     trueCount,
     dealerDist,
+    handSummaries,
     activeHand,
     activeTotal,
-    playerTotals,
     best,
     insurance,
     preRound,
@@ -382,24 +404,24 @@ function computeDerived() {
   };
 }
 
+// Mantém histórico limitado para operações de desfazer.
 function pushHistory(entry) {
   state.history.push(entry);
   if (state.history.length > 500) state.history.shift();
 }
 
-function clearTimers() {
-  for (const key of Object.keys(timers)) {
-    if (timers[key]) {
-      clearTimeout(timers[key]);
-      timers[key] = null;
-    }
-  }
-}
-
+// Registra cartas tanto do jogador quanto do dealer, respeitando dobrar e corte.
 function addCard(dest, value) {
-  if (dest === 'hand' && state.doubleMode) {
-    if (state.doubleLocked) return;
-    state.doubleLocked = true;
+  if (dest === 'hand') {
+    const idx = state.activeHand;
+    const currentHand = state.hands[idx] || [];
+    if (state.doubledFlags[idx] && currentHand.length >= 3) {
+      return;
+    }
+    if (state.doubleMode) {
+      if (state.doubleLocked) return;
+      state.doubleLocked = true;
+    }
   }
 
   state.runningCount += hiLoValue(value);
@@ -426,6 +448,7 @@ function addCard(dest, value) {
   finalizeUpdate();
 }
 
+// Ajuste rápido do contador informado por terceiros (+1/-1 no Hi-Lo).
 function adjustOthersRC(delta) {
   state.others.rc += delta;
   state.runningCount += delta;
@@ -435,6 +458,7 @@ function adjustOthersRC(delta) {
   finalizeUpdate();
 }
 
+// Registra cartas neutras (7-9) anunciadas por terceiros.
 function adjustOthersZero(delta) {
   const next = Math.max(0, state.others.zero + delta);
   const applied = next - state.others.zero;
@@ -443,6 +467,7 @@ function adjustOthersZero(delta) {
   finalizeUpdate();
 }
 
+// Desfaz a última operação atualizando contadores e histórico.
 function undoLast() {
   const last = state.history.pop();
   if (!last) return;
@@ -471,6 +496,7 @@ function undoLast() {
   finalizeUpdate();
 }
 
+// Reinicia a sapata preservando configurações e placar atual.
 function resetDeck() {
   const keep = {
     decks: state.decks,
@@ -487,6 +513,7 @@ function resetDeck() {
   finalizeUpdate();
 }
 
+// Avança para a próxima rodada preservando o histórico do round anterior.
 function nextRound() {
   state.others.last = { rc: state.others.rc, lo: state.others.lo, hi: state.others.hi, zero: state.others.zero };
   state.rounds += 1;
@@ -509,6 +536,7 @@ function nextRound() {
   finalizeUpdate();
 }
 
+// Calcula resultados e atualiza placares quando o dealer termina.
 function settleRound() {
   let wins = 0;
   let ties = 0;
@@ -544,6 +572,7 @@ function settleRound() {
   finalizeUpdate();
 }
 
+// Liga/desliga o modo de dobrar mantendo o bloqueio coerente.
 function toggleDoubleMode() {
   const next = !state.doubleMode;
   state.doubleMode = next;
@@ -551,6 +580,7 @@ function toggleDoubleMode() {
   finalizeUpdate();
 }
 
+// Permite alternar mãos durante splits sem carregar estados anteriores.
 function changeActiveHand(index) {
   state.activeHand = index;
   state.doubleMode = false;
@@ -558,6 +588,7 @@ function changeActiveHand(index) {
   finalizeUpdate();
 }
 
+// Agenda avisos contextuais (seguro, avanço automático, encerramento).
 function schedulePrompts(derived) {
   if (state.dealerCards.length === 1 && state.dealerCards[0] === 1) {
     state.showInsurancePrompt = true;
@@ -576,14 +607,15 @@ function schedulePrompts(derived) {
     }
   }
 
-  if (!state.playersDone && derived.best.action === 'PARAR' && state.hands[state.activeHand].length > 0) {
+  const canAutoAdvanceHand = !state.playersDone
+    && derived.best.action === 'PARAR'
+    && state.hands[state.activeHand].length > 0
+    && (state.activeHand + 1 < state.hands.length);
+
+  if (canAutoAdvanceHand) {
     if (timers.autoAdvance) clearTimeout(timers.autoAdvance);
     timers.autoAdvance = setTimeout(() => {
-      if (state.activeHand + 1 < state.hands.length) {
-        state.activeHand += 1;
-      } else {
-        state.playersDone = true;
-      }
+      state.activeHand += 1;
       finalizeUpdate();
     }, 150);
   } else if (timers.autoAdvance) {
@@ -606,6 +638,7 @@ function schedulePrompts(derived) {
   }
 }
 
+// Divide pares automaticamente quando a estratégia confirmar a separação.
 function applyAutoSplit(derived) {
   const activeHand = state.hands[state.activeHand] || [];
   if (state.dealerCards.length >= 2) return false;
@@ -623,6 +656,7 @@ function applyAutoSplit(derived) {
   return false;
 }
 
+// Consolida a dobra após a 3ª carta e avança para a próxima mão, se existir.
 function handleDoubleCompletion() {
   if (!state.doubleMode) return false;
   const active = state.hands[state.activeHand] || [];
@@ -632,12 +666,11 @@ function handleDoubleCompletion() {
   state.doubleLocked = false;
   if (state.activeHand + 1 < state.hands.length) {
     state.activeHand += 1;
-  } else {
-    state.playersDone = true;
   }
   return true;
 }
 
+// Fecha um ciclo de atualização: recalcula derivados, trata split/dobra e renderiza.
 function finalizeUpdate() {
   const derived = computeDerived();
   const doubleChanged = handleDoubleCompletion();
@@ -650,6 +683,7 @@ function finalizeUpdate() {
   render(derived);
 }
 
+// Renderiza a tela adequada (intro ou mesa) com os eventos vinculados.
 function render(derived = computeDerived()) {
   const root = document.getElementById('app');
   if (!root) return;
@@ -664,6 +698,7 @@ function render(derived = computeDerived()) {
   bindTableEvents(derived);
 }
 
+// Componente da tela inicial com seleção de baralhos e aposta mínima.
 function renderIntro() {
   const deckBtns = DEFAULT_DECK_OPTIONS.map((n) => `
     <button class="chip ${state.decks === n ? 'chip-active' : ''}" data-decks="${n}">${n}</button>
@@ -687,9 +722,17 @@ function renderIntro() {
   `;
 }
 
+// Componente principal da mesa agregando métricas, ações e histórico.
 function renderTable(derived) {
-  const { activeTotal, playerTotals, best, insurance, preRound, preWinPct, suggestedBet, trueCount, tilted } = derived;
-  const deckInfo = `${(tilted.totalRemaining / 52).toFixed(2)} decks (${Math.max(tilted.decksForTC, 0.01).toFixed(2)} usados p/ TC)`;
+  const { activeTotal, best, handSummaries, insurance, preRound, preWinPct, suggestedBet, trueCount, tilted } = derived;
+  const totalRemaining = Math.round(tilted.totalRemaining);
+  const playableCards = Math.max(0, Math.round(tilted.cardsAboveCut));
+  const deadCards = Math.max(0, Math.round(tilted.cardsBehindCut));
+  const decksForTC = tilted.decksForTC.toFixed(2);
+  const penetrationPct = Math.round((tilted.penetration || 0) * 100);
+  const cutTarget = Math.round(tilted.cutLimit || 0);
+  const seenTotal = Math.round(tilted.seenTotal || 0);
+  const removedByOthers = Math.round(tilted.removedByOthers || 0);
 
   let headerHTML = '';
   if (preRound) {
@@ -712,13 +755,14 @@ function renderTable(derived) {
       </div>`;
   }
 
-  const handsList = state.hands.map((h, i) => `
+  const handsList = state.hands.map((cards, i) => `
     <div class="hand-chip ${i === state.activeHand ? 'hand-active' : ''}" data-hand="${i}">
-      M${i + 1}: ${handTotal(h).total}${handTotal(h).soft ? 's' : ''} [${h.map((v) => v === 1 ? 'A' : v).join(' ') || '—'}]
+      M${i + 1}: ${handSummaries[i].total}${handSummaries[i].soft ? 's' : ''} [${cards.map((v) => (v === 1 ? 'A' : v)).join(' ') || '—'}]
       ${state.doubledFlags[i] ? ' · x2' : ''}
     </div>
   `).join('');
 
+  const dealerSummary = handTotal(state.dealerCards);
   const dealerButtons = renderCardButtons('dealer', state.dealerCards);
   const playerButtons = renderCardButtons('hand', state.hands[state.activeHand] || [], state.playersDone);
 
@@ -750,7 +794,7 @@ function renderTable(derived) {
           <p class="hint">2–6 = +1 · 7–9 = 0 · 10/A = −1</p>
         </article>
         <article class="panel">
-          <header>Dealer — Total ${handTotal(state.dealerCards).total}${handTotal(state.dealerCards).soft ? ' (soft)' : ''}</header>
+          <header>Dealer — Total ${dealerSummary.total}${dealerSummary.soft ? ' (soft)' : ''}</header>
           <div class="cards" data-target="dealer">${dealerButtons}</div>
         </article>
         <article class="panel">
@@ -765,39 +809,45 @@ function renderTable(derived) {
             ${state.doubleMode ? '<span class="note">Dobro armado: marque apenas 1 carta.</span>' : ''}
           </div>
         </article>
-        <article class="panel">
-          <header>Métricas</header>
-          <ul class="metrics">
-            <li>RC: <strong>${state.runningCount}</strong></li>
-            <li>TC: <strong>${trueCount.toFixed(2)}</strong></li>
-            <li>Cartas restantes: <strong>${Math.round(derived.tilted.totalRemaining)}</strong></li>
-            <li>Decks estimados: <strong>${deckInfo}</strong></li>
-            <li>P(10) seguro: <strong>${(insurance.pTen * 100).toFixed(1)}%</strong> ${insurance.suggest ? '· +EV' : ''}</li>
-          </ul>
-        </article>
-        <article class="panel">
-          <header>Placar</header>
-          <ul class="metrics">
-            <li>Vitórias: <strong>${state.wins}</strong></li>
-            <li>Empates: <strong>${state.ties}</strong></li>
-            <li>Derrotas: <strong>${state.losses}</strong></li>
-            <li>Lucro: <strong>${state.netProfit.toFixed(2)}</strong></li>
-            <li>Rodadas: <strong>${state.rounds}</strong></li>
-          </ul>
+        <article class="panel panel-stats">
+          <header>Métricas e Placar</header>
+          <div class="stats-grid">
+            <ul class="metrics">
+              <li>RC: <strong>${state.runningCount}</strong></li>
+              <li>TC: <strong>${trueCount.toFixed(2)}</strong></li>
+              <li>Cartas restantes: <strong>${totalRemaining}</strong> (${playableCards} até corte)</li>
+              <li>Fora do jogo: <strong>${deadCards}</strong></li>
+              <li>Penetração: <strong>${penetrationPct}%</strong></li>
+              <li>Decks p/ TC: <strong>${decksForTC}</strong></li>
+              <li>P(10) seguro: <strong>${(insurance.pTen * 100).toFixed(1)}%</strong> ${insurance.suggest ? '· +EV' : ''}</li>
+            </ul>
+            <ul class="metrics metrics-score">
+              <li>Vitórias: <strong>${state.wins}</strong></li>
+              <li>Empates: <strong>${state.ties}</strong></li>
+              <li>Derrotas: <strong>${state.losses}</strong></li>
+              <li>Lucro: <strong>${state.netProfit.toFixed(2)}</strong></li>
+              <li>Rodadas: <strong>${state.rounds}</strong></li>
+            </ul>
+          </div>
           <footer class="panel-footer">
             <button class="secondary" id="reset-btn">Reinício</button>
             <button class="primary" id="next-btn">Próxima</button>
           </footer>
-          <p class="hint">3P anterior — RC ${state.others.last.rc} · L ${state.others.last.lo} · H ${state.others.last.hi} · N ${state.others.last.zero}</p>
+          <p class="hint">Corte 60%: ${cutTarget} cartas · Vistas: ${seenTotal} · 3P retiradas: ${removedByOthers}${playableCards <= 0 ? ' · Corte atingido — reinicie' : ''} · 3P anterior — RC ${state.others.last.rc} · L ${state.others.last.lo} · H ${state.others.last.hi} · N ${state.others.last.zero}</p>
         </article>
       </div>
     </section>
   `;
 }
 
+// Renderiza os botões de carta reaproveitando frequências para marcar repetições.
 function renderCardButtons(target, selectedCards, disabled = false) {
+  const freq = selectedCards.reduce((acc, v) => {
+    acc[v] = (acc[v] || 0) + 1;
+    return acc;
+  }, {});
   return Array.from({ length: 10 }, (_, i) => i + 1).map((value) => {
-    const count = selectedCards.filter((v) => v === value).length;
+    const count = freq[value] || 0;
     const label = value === 1 ? 'A' : (value === 10 ? '10/J/Q/K' : value);
     const classes = ['card-btn'];
     if (count > 0 && !disabled) classes.push('card-active');
@@ -810,6 +860,7 @@ function renderCardButtons(target, selectedCards, disabled = false) {
   }).join('');
 }
 
+// Liga os eventos da tela inicial (configurações e início de jogo).
 function bindIntroEvents() {
   document.querySelectorAll('[data-decks]').forEach((btn) => {
     btn.addEventListener('click', () => {
@@ -832,6 +883,7 @@ function bindIntroEvents() {
   }
 }
 
+// Liga os eventos da mesa interativa para cada botão renderizado.
 function bindTableEvents(derived) {
   document.querySelectorAll('[data-card-target]').forEach((btn) => {
     btn.addEventListener('click', () => {
