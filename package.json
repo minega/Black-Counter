@@ -1,0 +1,15 @@
+{
+  "name": "black-counter",
+  "version": "1.0.0",
+  "description": "Contador de blackjack com build portátil para Windows",
+  "main": "electron/main.js",
+  "scripts": {
+    "start": "electron .",
+    "package:win": "electron-packager . BlackCounter --platform=win32 --arch=x64 --out dist --overwrite --prune=true --asar --ignore='^/(dist|out)$'"
+  },
+  "license": "MIT",
+  "devDependencies": {
+    "electron": "^29.4.0",
+    "@electron/packager": "^18.3.2"
+  }
+}
