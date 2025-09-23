@@ -841,7 +841,7 @@ function renderTable(derived) {
     <section class="table">
       ${headerHTML}
       ${state.showInsurancePrompt ? `<div class="insurance">${state.insuranceText}</div>` : ''}
-      <div class="grid">
+      <div class="panel-stack">
         <article class="panel">
           <header>Contador terceiros</header>
           <div class="others">
@@ -878,7 +878,7 @@ function renderTable(derived) {
             ${actionNotes}
           </div>
         </article>
-        <article class="panel panel-stats">
+        <article class="panel">
           <header>Métricas e Placar</header>
           <div class="metrics-row" aria-label="Métricas principais">${metricsLine}</div>
           <div class="score-row" aria-label="Placar e progresso">${scoreLine}</div>
