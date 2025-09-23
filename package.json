@@ -5,11 +5,37 @@
   "main": "electron/main.js",
   "scripts": {
     "start": "electron .",
-    "package:win": "electron-packager . BlackCounter --platform=win32 --arch=x64 --out dist --overwrite --prune=true --asar --ignore='^/(dist|out)$'"
+    "package:win": "electron-builder --win portable",
+    "package:dir": "electron-builder --dir",
+    "lint:core": "node --check app/assets/main.js"
   },
   "license": "MIT",
   "devDependencies": {
     "electron": "^29.4.0",
-    "@electron/packager": "^18.3.2"
+    "electron-builder": "^25.1.8"
+  },
+  "build": {
+    "appId": "com.blackcounter.app",
+    "productName": "BlackCounter",
+    "asar": true,
+    "files": [
+      "app/**/*",
+      "electron/**/*",
+      "package.json"
+    ],
+    "directories": {
+      "output": "dist"
+    },
+    "win": {
+      "target": [
+        {
+          "target": "portable",
+          "arch": [
+            "x64"
+          ]
+        }
+      ],
+      "artifactName": "BlackCounter_Portable_${version}_${arch}.exe"
+    }
   }
 }

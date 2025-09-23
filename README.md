@@ -1,8 +1,9 @@
-# Black Counter — build portátil para Windows
+# Black Counter — executável portátil para Windows
 
-Aplicativo de contagem e análise de blackjack rodando como executável Electron,
-com foco em portabilidade. O usuário final só precisa extrair uma pasta e abrir
-`BlackCounter.exe` — nenhum instalador ou dependência adicional é requerido.
+Aplicativo de contagem e análise de blackjack empacotado com Electron Builder.
+O resultado final é um único `BlackCounter_Portable_*.exe`: basta baixar,
+executar e a janela do contador abre imediatamente, sem instalador nem
+dependências externas.
 
 ## Funcionalidades principais
 - Assistente completo de decisões com cálculo de EV, RC/TC, seguro e splits.
@@ -12,6 +13,56 @@ com foco em portabilidade. O usuário final só precisa extrair uma pasta e abri
   da mão, split automático e encerramento da rodada.
 - Interface otimizada em JavaScript/CSS puros, empacotada dentro do runtime
   Electron para garantir comportamento idêntico em uma janela dedicada.
+
+## Pré-requisitos
+### 1. Instalar Node.js no Windows
+1. Acesse [https://nodejs.org/](https://nodejs.org/) e baixe a versão LTS.
+2. Execute o instalador e marque a opção **"Add to PATH"** quando for exibida.
+3. Conclua o instalador e reinicie o terminal/PowerShell.
+
+### 2. Baixar o código
+1. Clique em **Code → Download ZIP** aqui no repositório ou clone com Git.
+2. Extraia o `.zip` para uma pasta simples como `C:\BlackCounter`.
+
+## Primeiro passo: rodar `npm install`
+> Este comando baixa o Electron e todas as dependências do projeto.
+
+Abra o **PowerShell** na pasta extraída (Shift + clique direito → "Abrir no
+PowerShell" ou use `cd C:\BlackCounter`) e execute:
+
+```powershell
+npm install
+```
+
+Você pode automatizar tudo com o script incluso: dê duplo clique em
+`scripts\windows-build.bat` para instalar dependências e gerar o executável em
+uma tacada só.
+
+## Desenvolver e testar
+- **Abrir a janela do app em modo desenvolvimento**:
+
+  ```powershell
+  npm start
+  ```
+
+- **Checar rapidamente o bundle JavaScript** (garante ausência de erros de
+  sintaxe):
+
+  ```powershell
+  npm run lint:core
+  ```
+
+## Gerar o executável portátil
+```
+npm run package:win
+```
+
+Execute o comando no Windows (PowerShell ou Prompt). Em Linux/macOS é preciso
+instalar o `wine` para permitir o empacotamento do executável Windows.
+
+O Electron Builder gera `dist/BlackCounter_Portable_1.0.0_x64.exe` (o sufixo
+pode mudar conforme a versão). Compartilhe somente esse arquivo — o usuário
+final executa e o app abre em uma janela dedicada.
 
 ## Estrutura de pastas
 ```
@@ -24,51 +75,11 @@ Black-Counter/
 ├─ electron/
 │  ├─ main.js         # Processo principal do Electron (janela/segurança)
 │  └─ preload.js      # Preload isolado sem expor APIs extras
+├─ scripts/
+│  └─ windows-build.bat # Automação para Windows (instalação + build)
 ├─ package.json       # Scripts de desenvolvimento e empacotamento
 └─ AGENTS.md          # Diretrizes internas do repositório
 ```
-
-## Requisitos para desenvolver ou gerar a build
-- Node.js 18+ e npm.
-
-Instale as dependências uma única vez:
-
-```bash
-npm install
-```
-
-### Executar em modo desenvolvimento
-Abre a mesma janela do build portátil, recarregando manualmente quando houver
-mudanças:
-
-```bash
-npm start
-```
-
-### Gerar a pasta portátil para Windows
-O comando abaixo cria `dist/BlackCounter-win32-x64/` contendo o executável e
-recursos necessários. Basta compactar essa pasta (ZIP) e compartilhar.
-
-```bash
-npm run package:win
-```
-
-### Como o usuário final executa
-1. Baixe ou receba o arquivo `.zip` gerado anteriormente.
-2. Extraia o conteúdo para qualquer pasta local (por exemplo, `C:\BlackCounter`).
-3. Abra `BlackCounter.exe`. A aplicação inicializa imediatamente sem instalar
-   nada no sistema.
-
-## Testes rápidos
-O núcleo ainda é JavaScript vanilla. Para garantir que o bundle continue sem
-erros de sintaxe, execute:
-
-```bash
-node --check app/assets/main.js
-```
-
-Testes manuais continuam recomendados (interações principais: contagem de
-cartas, sugestão de jogadas, split/double automáticos e fluxo de rodada).
 
 ## Licença
 MIT
