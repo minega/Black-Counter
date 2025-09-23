@@ -38,6 +38,7 @@ function createInitialState() {
     playersDone: false,
     doubleMode: false,
     doubleLocked: false,
+    pendingSplit: false,
     others: { rc: 0, lo: 0, hi: 0, zero: 0, last: { rc: 0, lo: 0, hi: 0, zero: 0 } },
     bets: [0],
     doubledFlags: [false],
@@ -328,13 +329,17 @@ function computeDerived() {
   const pmf = computePMF(tilted.counts, tilted.totalRemaining);
   const decksForTC = tilted.decksForTC > 0 ? tilted.decksForTC : 0.25;
   const trueCount = state.runningCount / decksForTC;
-  const dealerDist = buildDealerDistribution(pmf, state.dealerCards.length ? state.dealerCards : [0]);
+  const dealerCards = state.dealerCards;
+  const hasDealerCard = dealerCards.length > 0;
+  const dealerDist = hasDealerCard ? buildDealerDistribution(pmf, dealerCards) : null;
   const handSummaries = state.hands.map((hand) => handTotal(hand));
   const activeHand = state.hands[state.activeHand] || [];
   const activeTotal = handSummaries[state.activeHand] || handTotal(activeHand);
   const allowDouble = state.hands.length > 1 ? RULES.doubleAfterSplit : true;
+  const needsDealerCard = !hasDealerCard && state.hands.some((hand) => hand.length >= 2);
+  const lockPlayerActions = needsDealerCard && !state.playersDone;
   let best = { action: null, ev: 0, pWin: 0, pTie: 0 };
-  if (activeHand.length > 0) {
+  if (activeHand.length > 0 && dealerDist) {
     if (activeHand.length === 2 && normRank(activeHand[0]) === normRank(activeHand[1])) {
       const rank = normRank(activeHand[0]);
       const noSplit = bestFromState({
@@ -365,7 +370,7 @@ function computeDerived() {
 
   const dealerUp = state.dealerCards[0] || 0;
   let insurance = { suggest: false, edge: 0, pTen: 0 };
-  if (dealerUp === 1) {
+  if (hasDealerCard && dealerUp === 1) {
     const pTen = pmf[10] || 0;
     const ev = 1.5 * pTen - 0.5;
     insurance = { suggest: ev > 0, edge: ev, pTen };
@@ -382,7 +387,7 @@ function computeDerived() {
   const suggestedBet = preEdge < -0.02 ? 0 : state.minBet;
 
   const handsWinPct = handSummaries.length === 0 ? 0 : handSummaries
-    .map((summary) => Math.max(0, Math.min(1, resolveStand(dealerDist, summary.total).pWin)))
+    .map((summary) => dealerDist ? Math.max(0, Math.min(1, resolveStand(dealerDist, summary.total).pWin)) : 0)
     .reduce((a, b) => a + b, 0) / Math.max(handSummaries.length, 1);
 
   return {
@@ -401,6 +406,8 @@ function computeDerived() {
     preWinPct,
     suggestedBet,
     handsWinPct,
+    needsDealerCard,
+    lockPlayerActions,
   };
 }
 
@@ -493,6 +500,7 @@ function undoLast() {
   } else if (last.type === 'othersZero') {
     state.others.zero = Math.max(0, state.others.zero - last.delta);
   }
+  state.pendingSplit = false;
   finalizeUpdate();
 }
 
@@ -523,6 +531,7 @@ function nextRound() {
   state.playersDone = false;
   state.doubleMode = false;
   state.doubleLocked = false;
+  state.pendingSplit = false;
   state.bets = [0];
   state.doubledFlags = [false];
   state.splitFlags = [false];
@@ -585,6 +594,7 @@ function changeActiveHand(index) {
   state.activeHand = index;
   state.doubleMode = false;
   state.doubleLocked = false;
+  state.pendingSplit = false;
   finalizeUpdate();
 }
 
@@ -638,22 +648,32 @@ function schedulePrompts(derived) {
   }
 }
 
-// Divide pares automaticamente quando a estratégia confirmar a separação.
-function applyAutoSplit(derived) {
+// Confirma e executa a separação quando o usuário autoriza.
+function commitSplitRequest() {
+  if (!state.pendingSplit) return false;
+  state.pendingSplit = false;
+  if (state.dealerCards.length === 0) return false;
   const activeHand = state.hands[state.activeHand] || [];
-  if (state.dealerCards.length >= 2) return false;
-  if (derived.best.action === 'SEPARAR' && activeHand.length === 2 && state.hands.length < RULES.maxSplits) {
-    const [c1, c2] = activeHand;
-    state.hands.splice(state.activeHand, 1, [c1], [c2]);
-    const bet = state.bets[state.activeHand] || state.minBet;
-    state.bets.splice(state.activeHand, 1, bet, bet);
-    state.doubledFlags.splice(state.activeHand, 1, false, false);
-    state.splitFlags.splice(state.activeHand, 1, true, true);
-    state.doubleMode = false;
-    state.doubleLocked = false;
-    return true;
-  }
-  return false;
+  if (activeHand.length !== 2) return false;
+  if (normRank(activeHand[0]) !== normRank(activeHand[1])) return false;
+  if (state.hands.length >= RULES.maxSplits) return false;
+  const [c1, c2] = activeHand;
+  const bet = state.bets[state.activeHand] || state.minBet;
+  state.hands.splice(state.activeHand, 1, [c1], [c2]);
+  state.bets.splice(state.activeHand, 1, bet, bet);
+  state.doubledFlags.splice(state.activeHand, 1, false, false);
+  state.splitFlags.splice(state.activeHand, 1, true, true);
+  state.doubleMode = false;
+  state.doubleLocked = false;
+  return true;
+}
+
+// Dispara o pedido de split garantindo apenas um clique necessário.
+function requestSplit() {
+  if (state.pendingSplit) return;
+  if (state.dealerCards.length === 0) return;
+  state.pendingSplit = true;
+  finalizeUpdate();
 }
 
 // Consolida a dobra após a 3ª carta e avança para a próxima mão, se existir.
@@ -672,9 +692,9 @@ function handleDoubleCompletion() {
 
 // Fecha um ciclo de atualização: recalcula derivados, trata split/dobra e renderiza.
 function finalizeUpdate() {
-  const derived = computeDerived();
+  const splitChanged = commitSplitRequest();
   const doubleChanged = handleDoubleCompletion();
-  const splitChanged = applyAutoSplit(derived);
+  const derived = computeDerived();
   if (doubleChanged || splitChanged) {
     finalizeUpdate();
     return;
@@ -724,7 +744,20 @@ function renderIntro() {
 
 // Componente principal da mesa agregando métricas, ações e histórico.
 function renderTable(derived) {
-  const { activeTotal, best, handSummaries, insurance, preRound, preWinPct, suggestedBet, trueCount, tilted } = derived;
+  const {
+    activeTotal,
+    best,
+    activeHand,
+    handSummaries,
+    insurance,
+    preRound,
+    preWinPct,
+    suggestedBet,
+    trueCount,
+    tilted,
+    needsDealerCard,
+    lockPlayerActions,
+  } = derived;
   const totalRemaining = Math.round(tilted.totalRemaining);
   const playableCards = Math.max(0, Math.round(tilted.cardsAboveCut));
   const deadCards = Math.max(0, Math.round(tilted.cardsBehindCut));
@@ -735,7 +768,12 @@ function renderTable(derived) {
   const removedByOthers = Math.round(tilted.removedByOthers || 0);
 
   let headerHTML = '';
-  if (preRound) {
+  if (needsDealerCard) {
+    headerHTML = `
+      <div class="header-card">
+        <div>Informe a carta do dealer para liberar as decisões.</div>
+      </div>`;
+  } else if (preRound) {
     headerHTML = `
       <div class="header-card">
         <div>Chance: <strong>${Math.round(preWinPct * 100)}%</strong></div>
@@ -764,7 +802,22 @@ function renderTable(derived) {
 
   const dealerSummary = handTotal(state.dealerCards);
   const dealerButtons = renderCardButtons('dealer', state.dealerCards);
-  const playerButtons = renderCardButtons('hand', state.hands[state.activeHand] || [], state.playersDone);
+  const lockPlayerCards = state.playersDone || lockPlayerActions;
+  const playerButtons = renderCardButtons('hand', state.hands[state.activeHand] || [], lockPlayerCards);
+  const showDoubleButton = best.action === 'DOBRAR'
+    && !state.doubleMode
+    && state.dealerCards.length < 2
+    && (state.hands.length === 1 || RULES.doubleAfterSplit)
+    && !lockPlayerCards;
+  const showSplitButton = best.action === 'SEPARAR'
+    && !state.pendingSplit
+    && (activeHand.length === 2)
+    && state.hands.length < RULES.maxSplits
+    && !lockPlayerCards;
+  const actionNotes = [
+    state.doubleMode ? '<span class="note">Dobro armado: marque apenas 1 carta.</span>' : '',
+    lockPlayerActions ? '<span class="note">Informe a carta do dealer antes de continuar.</span>' : '',
+  ].filter(Boolean).join(' ');
 
   return `
     <section class="table">
@@ -803,10 +856,9 @@ function renderTable(derived) {
           <div class="cards" data-target="hand">${playerButtons}</div>
           <div class="actions">
             <button class="secondary" id="undo-btn">Desfazer</button>
-            ${(best.action === 'DOBRAR' && !state.doubleMode && state.dealerCards.length < 2 && (state.hands.length === 1 || RULES.doubleAfterSplit))
-              ? '<button class="primary" id="double-btn">Confirmar Dobrar</button>'
-              : ''}
-            ${state.doubleMode ? '<span class="note">Dobro armado: marque apenas 1 carta.</span>' : ''}
+            ${showDoubleButton ? '<button class="primary" id="double-btn">Confirmar Dobrar</button>' : ''}
+            ${showSplitButton ? '<button class="primary" id="split-btn">Confirmar Separar</button>' : ''}
+            ${actionNotes}
           </div>
         </article>
         <article class="panel panel-stats">
@@ -905,6 +957,9 @@ function bindTableEvents(derived) {
 
   const doubleBtn = document.getElementById('double-btn');
   if (doubleBtn) doubleBtn.addEventListener('click', toggleDoubleMode);
+
+  const splitBtn = document.getElementById('split-btn');
+  if (splitBtn) splitBtn.addEventListener('click', requestSplit);
 
   document.querySelectorAll('.hand-chip').forEach((chip) => {
     chip.addEventListener('click', () => {
