@@ -23,6 +23,40 @@ const timers = {
 // Estado global inicializado com todas as variáveis controladas pela UI.
 const state = createInitialState();
 
+// Controle de escala responsiva para manter o app sempre visível sem barras.
+let scaleUpdateId = null;
+
+function scheduleScaleUpdate() {
+  if (scaleUpdateId !== null) return;
+  scaleUpdateId = requestAnimationFrame(() => {
+    scaleUpdateId = null;
+    applyResponsiveScale();
+  });
+}
+
+function applyResponsiveScale() {
+  const rootElement = document.documentElement;
+  const appElement = document.getElementById('app');
+  if (!rootElement || !appElement) return;
+  const stage = appElement.querySelector('.app-stage');
+  if (!stage) return;
+
+  rootElement.style.setProperty('--layout-scale', '1');
+  rootElement.style.setProperty('--density-factor', '1');
+  stage.classList.remove('is-condensed');
+
+  const availableWidth = Math.max(appElement.clientWidth, 1);
+  const availableHeight = Math.max(appElement.clientHeight, 1);
+  const naturalWidth = Math.max(stage.scrollWidth, 1);
+  const naturalHeight = Math.max(stage.scrollHeight, 1);
+
+  const rawScale = Math.min(1, availableWidth / naturalWidth, availableHeight / naturalHeight);
+  const scale = Math.max(0.4, Math.min(1, rawScale));
+  rootElement.style.setProperty('--layout-scale', scale.toFixed(3));
+  rootElement.style.setProperty('--density-factor', scale.toFixed(3));
+  if (scale < 0.999) stage.classList.add('is-condensed');
+}
+
 // Monta o estado padrão de uma nova sessão.
 function createInitialState() {
   // Etapa 1: declarar todas as fatias necessárias para renderização e lógica.
@@ -710,11 +744,13 @@ function render(derived = computeDerived()) {
 
   if (state.screen === 'intro') {
     root.innerHTML = renderIntro();
+    scheduleScaleUpdate();
     bindIntroEvents();
     return;
   }
 
   root.innerHTML = renderTable(derived);
+  scheduleScaleUpdate();
   bindTableEvents(derived);
 }
 
@@ -727,18 +763,20 @@ function renderIntro() {
     <button class="chip ${state.minBet === v ? 'chip-active' : ''}" data-minbet="${v}">${v}</button>
   `).join('');
   return `
-    <section class="intro">
-      <h1>Black Counter</h1>
-      <div>
-        <h2>Baralhos</h2>
-        <div class="chip-row">${deckBtns}</div>
-      </div>
-      <div>
-        <h2>Aposta mínima</h2>
-        <div class="chip-row">${betBtns}</div>
-      </div>
-      <button class="primary" id="start-btn">Iniciar</button>
-    </section>
+    <div class="app-stage">
+      <section class="intro">
+        <h1>Black Counter</h1>
+        <div>
+          <h2>Baralhos</h2>
+          <div class="chip-row">${deckBtns}</div>
+        </div>
+        <div>
+          <h2>Aposta mínima</h2>
+          <div class="chip-row">${betBtns}</div>
+        </div>
+        <button class="primary" id="start-btn">Iniciar</button>
+      </section>
+    </div>
   `;
 }
 
@@ -838,11 +876,12 @@ function renderTable(derived) {
   `;
 
   return `
-    <section class="table">
-      ${headerHTML}
-      ${state.showInsurancePrompt ? `<div class="insurance">${state.insuranceText}</div>` : ''}
-      <div class="panel-stack">
-        <article class="panel">
+    <div class="app-stage">
+      <section class="table">
+        ${headerHTML}
+        ${state.showInsurancePrompt ? `<div class="insurance">${state.insuranceText}</div>` : ''}
+        <div class="panel-stack">
+          <article class="panel">
           <header>Contador terceiros</header>
           <div class="others">
             <div class="others-group">
@@ -878,18 +917,19 @@ function renderTable(derived) {
             ${actionNotes}
           </div>
         </article>
-        <article class="panel">
-          <header>Métricas e Placar</header>
-          <div class="metrics-row" aria-label="Métricas principais">${metricsLine}</div>
-          <div class="score-row" aria-label="Placar e progresso">${scoreLine}</div>
-          <footer class="panel-footer">
-            <button class="secondary" id="reset-btn">Reinício</button>
-            <button class="primary" id="next-btn">Próxima</button>
-          </footer>
-          <p class="hint">Corte 60%: ${cutTarget} cartas · Vistas: ${seenTotal} · 3P retiradas: ${removedByOthers}${playableCards <= 0 ? ' · Corte atingido — reinicie' : ''} · 3P anterior — RC ${state.others.last.rc} · L ${state.others.last.lo} · H ${state.others.last.hi} · N ${state.others.last.zero}</p>
-        </article>
-      </div>
-    </section>
+          <article class="panel">
+            <header>Métricas e Placar</header>
+            <div class="metrics-row" aria-label="Métricas principais">${metricsLine}</div>
+            <div class="score-row" aria-label="Placar e progresso">${scoreLine}</div>
+            <footer class="panel-footer">
+              <button class="secondary" id="reset-btn">Reinício</button>
+              <button class="primary" id="next-btn">Próxima</button>
+            </footer>
+            <p class="hint">Corte 60%: ${cutTarget} cartas · Vistas: ${seenTotal} · 3P retiradas: ${removedByOthers}${playableCards <= 0 ? ' · Corte atingido — reinicie' : ''} · 3P anterior — RC ${state.others.last.rc} · L ${state.others.last.lo} · H ${state.others.last.hi} · N ${state.others.last.zero}</p>
+          </article>
+        </div>
+      </section>
+    </div>
   `;
 }
 
@@ -975,5 +1015,7 @@ function bindTableEvents(derived) {
   const nextBtn = document.getElementById('next-btn');
   if (nextBtn) nextBtn.addEventListener('click', nextRound);
 }
+
+window.addEventListener('resize', scheduleScaleUpdate);
 
 render();
