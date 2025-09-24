@@ -403,6 +403,10 @@ body {
   flex-wrap: wrap;
 }
 
+.push-end {
+  margin-left: auto;
+}
+
 .metrics-row {
   display: flex;
   flex-wrap: wrap;
