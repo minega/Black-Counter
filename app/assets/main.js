@@ -20,6 +20,16 @@ const timers = {
   settle: null,
 };
 
+// Utilitário centralizado para evitar disparos atrasados após resets.
+function clearAllTimers() {
+  for (const key of Object.keys(timers)) {
+    if (timers[key]) {
+      clearTimeout(timers[key]);
+      timers[key] = null;
+    }
+  }
+}
+
 // Estado global inicializado com todas as variáveis controladas pela UI.
 const state = createInitialState();
 
@@ -213,7 +223,8 @@ function computeTiltedCounts(baseCounts, others) {
   const seenTotal = Math.min(totalCards, seenPersonal + removedByOthers);
   const cardsAboveCut = Math.max(0, cutLimit - seenTotal);
   const cardsBehindCut = Math.max(0, totalRemaining - cardsAboveCut);
-  const decksForTC = Math.max(cardsAboveCut / 52, 0.25);
+  const liveDecks = totalRemaining / 52; // Usa o baralho inteiro para seguir operando após o corte.
+  const decksForTC = Math.max(liveDecks, 0.25);
   const penetration = totalCards > 0 ? seenTotal / totalCards : 0;
 
   return {
@@ -582,8 +593,9 @@ function undoLast() {
   finalizeUpdate();
 }
 
-// Reinicia a sapata preservando configurações e placar atual.
-function resetDeck() {
+// Troca de sapata: limpa apenas cartas mantendo configurações e placar.
+function swapDeck() {
+  clearAllTimers();
   const keep = {
     decks: state.decks,
     minBet: state.minBet,
@@ -593,6 +605,16 @@ function resetDeck() {
     losses: state.losses,
     rounds: state.rounds,
   };
+  Object.assign(state, createInitialState(), keep);
+  state.screen = 'table';
+  state.history = [];
+  finalizeUpdate();
+}
+
+// Reinício total: zera placar, históricos e prepara nova sessão.
+function resetSession() {
+  clearAllTimers();
+  const keep = { decks: state.decks, minBet: state.minBet };
   Object.assign(state, createInitialState(), keep);
   state.screen = 'table';
   state.history = [];
@@ -842,7 +864,7 @@ function renderTable(derived) {
   } = derived;
   const totalRemaining = Math.round(tilted.totalRemaining);
   const playableCards = Math.max(0, Math.round(tilted.cardsAboveCut));
-  const deadCards = Math.max(0, Math.round(tilted.cardsBehindCut));
+  const postCutCards = Math.max(0, Math.round(tilted.cardsBehindCut));
   const decksForTC = tilted.decksForTC.toFixed(2);
   const penetrationPct = Math.round((tilted.penetration || 0) * 100);
   const cutTarget = Math.round(tilted.cutLimit || 0);
@@ -905,7 +927,7 @@ function renderTable(derived) {
     `RC <strong>${state.runningCount}</strong>`,
     `TC <strong>${trueCount.toFixed(2)}</strong>`,
     `Restantes <strong>${totalRemaining}</strong>` + (playableCards > 0 ? ` (${playableCards} até corte)` : ''),
-    `Fora <strong>${deadCards}</strong>`,
+    `Após corte <strong>${postCutCards}</strong>`,
     `Penetração <strong>${penetrationPct}%</strong>`,
     `Decks p/ TC <strong>${decksForTC}</strong>`,
     `P(10) <strong>${(insurance.pTen * 100).toFixed(1)}%</strong>${insurance.suggest ? ' · +EV' : ''}`,
@@ -968,10 +990,11 @@ function renderTable(derived) {
             <div class="metrics-row" aria-label="Métricas principais">${metricsLine}</div>
             <div class="score-row" aria-label="Placar e progresso">${scoreLine}</div>
             <footer class="panel-footer">
-              <button class="secondary" id="reset-btn">Reinício</button>
+              <button class="secondary" id="swap-deck-btn">Troca baralho</button>
               <button class="primary" id="next-btn">Próxima</button>
+              <button class="secondary push-end" id="full-reset-btn">Reiniciar</button>
             </footer>
-            <p class="hint">Corte 60%: ${cutTarget} cartas · Vistas: ${seenTotal} · 3P retiradas: ${removedByOthers}${playableCards <= 0 ? ' · Corte atingido — reinicie' : ''} · 3P anterior — RC ${state.others.last.rc} · L ${state.others.last.lo} · H ${state.others.last.hi} · N ${state.others.last.zero}</p>
+            <p class="hint">Corte 60%: ${cutTarget} cartas · Vistas: ${seenTotal} · 3P retiradas: ${removedByOthers}${playableCards <= 0 ? ' · Corte ultrapassado — troque quando desejar' : ''} · 3P anterior — RC ${state.others.last.rc} · L ${state.others.last.lo} · H ${state.others.last.hi} · N ${state.others.last.zero}</p>
           </article>
         </div>
       </section>
@@ -1055,8 +1078,11 @@ function bindTableEvents(derived) {
     });
   });
 
-  const resetBtn = document.getElementById('reset-btn');
-  if (resetBtn) resetBtn.addEventListener('click', resetDeck);
+  const swapDeckBtn = document.getElementById('swap-deck-btn');
+  if (swapDeckBtn) swapDeckBtn.addEventListener('click', swapDeck);
+
+  const fullResetBtn = document.getElementById('full-reset-btn');
+  if (fullResetBtn) fullResetBtn.addEventListener('click', resetSession);
 
   const nextBtn = document.getElementById('next-btn');
   if (nextBtn) nextBtn.addEventListener('click', nextRound);
