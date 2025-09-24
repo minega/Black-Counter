@@ -13,8 +13,9 @@ function createMainWindow() {
   const mainWindow = new BrowserWindow({
     width: 1280,
     height: 720,
-    minWidth: 960,
-    minHeight: 600,
+    minWidth: 320,
+    minHeight: 360,
+    // Limite mínimo bem baixo: o conteúdo se autoajusta e ninguém precisa de barras.
     backgroundColor: '#060810',
     show: false, // apenas exibir quando o DOM terminar de carregar para evitar flicker.
     autoHideMenuBar: true,

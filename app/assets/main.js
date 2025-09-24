@@ -26,6 +26,14 @@ const state = createInitialState();
 // Controle de escala responsiva para manter o app sempre visível sem barras.
 let scaleUpdateId = null;
 
+// Limites e ajustes usados pela escala automática para caber em qualquer janela.
+const SCALE_CONSTRAINTS = {
+  minScale: 0.16,
+  minDensity: 0.18,
+  densityBoost: 1.08,
+  overscan: 0.985,
+};
+
 function scheduleScaleUpdate() {
   if (scaleUpdateId !== null) return;
   scaleUpdateId = requestAnimationFrame(() => {
@@ -51,10 +59,46 @@ function applyResponsiveScale() {
   const naturalHeight = Math.max(stage.scrollHeight, 1);
 
   const rawScale = Math.min(1, availableWidth / naturalWidth, availableHeight / naturalHeight);
-  const scale = Math.max(0.4, Math.min(1, rawScale));
+  const needsShrink = rawScale < 0.999;
+  let scale = rawScale;
+  if (needsShrink) scale = rawScale * SCALE_CONSTRAINTS.overscan;
+  scale = Math.max(SCALE_CONSTRAINTS.minScale, Math.min(1, scale));
+
+  // A densidade segue a escala com leve reforço para manter legibilidade.
+  const density = Math.max(
+    SCALE_CONSTRAINTS.minDensity,
+    Math.min(1, scale * SCALE_CONSTRAINTS.densityBoost),
+  );
+
   rootElement.style.setProperty('--layout-scale', scale.toFixed(3));
-  rootElement.style.setProperty('--density-factor', scale.toFixed(3));
+  rootElement.style.setProperty('--density-factor', density.toFixed(3));
   if (scale < 0.999) stage.classList.add('is-condensed');
+
+  // Checagem final: se mesmo assim houver sobra, corrigimos com base no retângulo renderizado.
+  const bounds = stage.getBoundingClientRect();
+  const overflowWidth = bounds.width - availableWidth;
+  const overflowHeight = bounds.height - availableHeight;
+  if ((overflowWidth > 0.5 || overflowHeight > 0.5) && scale > SCALE_CONSTRAINTS.minScale) {
+    const correction = Math.min(
+      1,
+      availableWidth / Math.max(bounds.width, 1),
+      availableHeight / Math.max(bounds.height, 1),
+    );
+    const correctedScale = Math.max(
+      SCALE_CONSTRAINTS.minScale,
+      Math.min(1, scale * correction * SCALE_CONSTRAINTS.overscan),
+    );
+    if (correctedScale < scale - 0.001) {
+      const correctedDensity = Math.max(
+        SCALE_CONSTRAINTS.minDensity,
+        Math.min(1, correctedScale * SCALE_CONSTRAINTS.densityBoost),
+      );
+      rootElement.style.setProperty('--layout-scale', correctedScale.toFixed(3));
+      rootElement.style.setProperty('--density-factor', correctedDensity.toFixed(3));
+      if (correctedScale < 0.999) stage.classList.add('is-condensed');
+      scale = correctedScale;
+    }
+  }
 }
 
 // Monta o estado padrão de uma nova sessão.
@@ -763,7 +807,7 @@ function renderIntro() {
     <button class="chip ${state.minBet === v ? 'chip-active' : ''}" data-minbet="${v}">${v}</button>
   `).join('');
   return `
-    <div class="app-stage">
+    <div class="app-stage app-stage--intro">
       <section class="intro">
         <h1>Black Counter</h1>
         <div>
@@ -876,32 +920,34 @@ function renderTable(derived) {
   `;
 
   return `
-    <div class="app-stage">
+    <div class="app-stage app-stage--table">
       <section class="table">
         ${headerHTML}
         ${state.showInsurancePrompt ? `<div class="insurance">${state.insuranceText}</div>` : ''}
         <div class="panel-stack">
+          <!-- Layout histórico: manter terceiros, dealer, jogador e métricas em sequência vertical -->
           <article class="panel">
-          <header>Contador terceiros</header>
-          <div class="others">
-            <div class="others-group">
-              <span>Hi-Lo (±1)</span>
-              <div class="stepper" data-action="othersRC">
-                <button data-delta="-1" aria-label="Diminuir Hi-Lo">−</button>
-                <div>${state.others.rc}</div>
-                <button data-delta="1" aria-label="Aumentar Hi-Lo">+</button>
+            <header>Contador terceiros</header>
+            <div class="others">
+              <div class="others-group">
+                <span class="others-label">Hi-Lo (±1)</span>
+                <div class="stepper" data-action="othersRC">
+                  <button data-delta="-1" aria-label="Diminuir Hi-Lo">−</button>
+                  <div>${state.others.rc}</div>
+                  <button data-delta="1" aria-label="Aumentar Hi-Lo">+</button>
+                </div>
+              </div>
+              <span class="others-divider" aria-hidden="true"></span>
+              <div class="others-group others-group--neutral">
+                <span class="others-label">Neutras 7–9</span>
+                <div class="stepper stepper-neutral" data-action="othersZero">
+                  <div class="others-neutral-value">${state.others.zero}</div>
+                  <button data-delta="1" aria-label="Adicionar carta neutra">+</button>
+                </div>
               </div>
             </div>
-            <div class="others-group">
-              <span>Neutras 7–9</span>
-              <div class="stepper stepper-neutral" data-action="othersZero">
-                <div>${state.others.zero}</div>
-                <button data-delta="1" aria-label="Adicionar carta neutra">+</button>
-              </div>
-            </div>
-          </div>
-          <p class="hint">2–6 = +1 · 7–9 = 0 · 10/A = −1</p>
-        </article>
+            <p class="hint">2–6 = +1 · 7–9 = 0 · 10/A = −1</p>
+          </article>
         <article class="panel">
           <header>Dealer — Total ${dealerSummary.total}${dealerSummary.soft ? ' (soft)' : ''}</header>
           <div class="cards" data-target="dealer">${dealerButtons}</div>
