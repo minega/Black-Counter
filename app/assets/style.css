@@ -10,8 +10,8 @@
   --app-padding: clamp(0.6rem, calc(0.4rem + var(--fluid-step) * var(--density-factor)), 1.5rem);
   --panel-gap: clamp(0.55rem, calc(0.35rem + var(--fluid-step) * var(--density-factor) * 0.7), 1rem);
   --panel-padding: clamp(0.55rem, calc(0.4rem + var(--fluid-step) * var(--density-factor) * 0.75), 1.1rem);
-  --card-height: clamp(2.6rem, calc(2.1rem + var(--fluid-step) * var(--density-factor) * 1.2), 3.4rem);
-  --card-font: clamp(0.62rem, calc(0.54rem + var(--fluid-step) * var(--density-factor) * 0.35), 0.82rem);
+  --card-height: clamp(1.75rem, calc(1.45rem + var(--fluid-step) * var(--density-factor) * 0.9), 2.5rem);
+  --card-font: clamp(0.5rem, calc(0.46rem + var(--fluid-step) * var(--density-factor) * 0.28), 0.72rem);
   --chip-gap: clamp(0.45rem, calc(0.32rem + var(--fluid-step) * var(--density-factor) * 0.55), 0.8rem);
 }
 
@@ -27,29 +27,41 @@ body {
   margin: 0;
   min-height: 100vh;
   background: linear-gradient(180deg, #08090d 0%, #111320 100%);
+  /* Bloqueamos barras para sempre depender da escala automática. */
   overflow: hidden;
   color: inherit;
 }
 
 .app {
-  height: 100%;
+  height: 100vh;
   width: 100%;
   display: flex;
   justify-content: center;
-  align-items: flex-start;
+  align-items: center;
   padding: var(--app-padding);
+  /* Sem rolagem: a escala garante que tudo caiba. */
   overflow: hidden;
 }
 
 .app-stage {
   width: min(62rem, 100%);
-  max-height: calc(100vh - (var(--app-padding) * 2));
   display: flex;
   flex-direction: column;
   align-items: stretch;
   gap: var(--panel-gap);
-  overflow: hidden;
   transition: gap 0.2s ease;
+}
+
+.app-stage--intro {
+  min-height: min(36rem, 100%);
+  justify-content: center;
+  align-items: center;
+}
+
+.app-stage--table {
+  align-self: stretch;
+  justify-content: flex-start;
+  margin: 0 auto;
 }
 
 .app-stage.is-condensed {
@@ -60,7 +72,8 @@ body {
   display: flex;
   flex-direction: column;
   gap: clamp(0.8rem, calc(0.55rem + var(--fluid-step) * var(--density-factor)), 1.5rem);
-  align-items: stretch;
+  align-items: center;
+  text-align: center;
   background: rgba(16, 18, 30, 0.92);
   padding: clamp(1.4rem, calc(1rem + var(--fluid-step) * var(--density-factor) * 1.2), 3rem) clamp(1.25rem, calc(0.9rem + var(--fluid-step) * var(--density-factor) * 1.6), 3rem);
   border-radius: 1.5rem;
@@ -84,9 +97,19 @@ body {
   margin-bottom: 0.4rem;
 }
 
+.intro > div {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  text-align: center;
+  width: 100%;
+  gap: clamp(0.4rem, calc(0.3rem + var(--fluid-step) * var(--density-factor) * 0.4), 0.75rem);
+}
+
 .chip-row {
   display: flex;
   flex-wrap: wrap;
+  justify-content: center;
   gap: var(--chip-gap);
 }
 
@@ -122,6 +145,11 @@ body {
   transition: transform 0.2s ease, box-shadow 0.2s ease, background 0.2s ease;
 }
 
+.intro .primary {
+  align-self: center;
+  width: min(16rem, 100%);
+}
+
 .primary {
   background: linear-gradient(135deg, #ef4444 0%, #f97316 100%);
   color: #fff;
@@ -148,7 +176,6 @@ body {
   display: flex;
   flex-direction: column;
   gap: var(--panel-gap);
-  overflow: hidden;
 }
 
 .header-card {
@@ -175,7 +202,7 @@ body {
   flex: 1 1 auto;
   min-height: 0;
   display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(17rem, 1fr));
+  grid-template-columns: minmax(0, 1fr);
   gap: var(--panel-gap);
   align-content: start;
 }
@@ -202,21 +229,51 @@ body {
 }
 
 .others {
-  display: flex;
-  gap: var(--panel-gap);
-  flex-wrap: wrap;
-  align-items: flex-end;
-}
-
-.others span {
-  font-size: clamp(0.68rem, calc(0.62rem + var(--fluid-step) * var(--density-factor) * 0.08), 0.78rem);
-  opacity: 0.7;
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto minmax(0, 1fr);
+  gap: calc(var(--panel-gap) * 0.85);
+  align-items: stretch;
 }
 
 .others-group {
   display: flex;
   flex-direction: column;
-  gap: clamp(0.3rem, calc(0.2rem + var(--fluid-step) * var(--density-factor) * 0.3), 0.45rem);
+  gap: clamp(0.32rem, calc(0.22rem + var(--fluid-step) * var(--density-factor) * 0.32), 0.48rem);
+}
+
+.others-label {
+  font-size: clamp(0.68rem, calc(0.62rem + var(--fluid-step) * var(--density-factor) * 0.08), 0.78rem);
+  opacity: 0.72;
+}
+
+.others-divider {
+  display: block;
+  width: 1px;
+  background: linear-gradient(180deg, rgba(255, 255, 255, 0.08), rgba(255, 255, 255, 0.02));
+  border-radius: 999px;
+  align-self: stretch;
+}
+
+.others-group--neutral {
+  gap: clamp(0.35rem, calc(0.25rem + var(--fluid-step) * var(--density-factor) * 0.32), 0.5rem);
+}
+
+.others-neutral-value {
+  text-align: right;
+}
+
+@media (max-width: 720px) {
+  .others {
+    grid-template-columns: minmax(0, 1fr);
+    gap: clamp(0.4rem, calc(0.28rem + var(--fluid-step) * var(--density-factor) * 0.35), 0.65rem);
+  }
+
+  .others-divider {
+    width: 100%;
+    height: 1px;
+    background: linear-gradient(90deg, rgba(255, 255, 255, 0.08), rgba(255, 255, 255, 0.02));
+    margin: 0.1rem 0;
+  }
 }
 
 .stepper {
@@ -246,7 +303,12 @@ body {
 }
 
 .stepper-neutral {
-  grid-template-columns: repeat(2, minmax(2.5rem, auto));
+  grid-template-columns: minmax(2.75rem, 1fr) clamp(2.2rem, calc(1.7rem + var(--fluid-step) * var(--density-factor) * 0.45), 2.6rem);
+}
+
+.others-group--neutral .stepper {
+  grid-template-columns: minmax(2.6rem, 1fr) clamp(2.1rem, calc(1.6rem + var(--fluid-step) * var(--density-factor) * 0.4), 2.5rem);
+  align-items: center;
 }
 
 .hint {
@@ -257,16 +319,16 @@ body {
 
 .cards {
   display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(3.1rem, 1fr));
+  grid-template-columns: repeat(auto-fit, minmax(2.35rem, 1fr));
   gap: clamp(0.28rem, calc(0.2rem + var(--fluid-step) * var(--density-factor) * 0.4), 0.5rem);
 }
 
 .card-btn {
   position: relative;
-  border-radius: 0.875rem;
+  border-radius: 0.75rem;
   border: 1px solid rgba(255, 255, 255, 0.12);
-  background: rgba(255, 255, 255, 0.06);
-  padding: clamp(0.32rem, calc(0.24rem + var(--fluid-step) * var(--density-factor) * 0.35), 0.5rem);
+  background: rgba(255, 255, 255, 0.05);
+  padding: clamp(0.26rem, calc(0.2rem + var(--fluid-step) * var(--density-factor) * 0.3), 0.42rem);
   text-align: center;
   cursor: pointer;
   min-height: var(--card-height);
